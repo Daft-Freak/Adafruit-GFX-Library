@@ -49,6 +49,10 @@ typedef uint8_t ADAGFX_PORT_t; ///< PORT values are 8-bit
 #endif
 #define USE_FAST_PINIO   ///< Use direct PORT register access
 #define HAS_PORT_SET_CLR ///< PORTs have set & clear registers
+#elif defined(ARDUINO_ARCH_RP2040)
+typedef uint32_t ADAGFX_PORT_t; ///< PORT values are 32-bit
+#define USE_FAST_PINIO   ///< Use direct PORT register access
+#define HAS_PORT_SET_CLR ///< PORTs have set & clear registers
 #else
 // Arduino Due?
 typedef uint32_t ADAGFX_PORT_t; ///< PORT values are 32-bit
@@ -445,6 +449,8 @@ protected:
 #if defined(__IMXRT1052__) || defined(__IMXRT1062__) // Teensy 4.x
       volatile uint32_t *writePort; ///< PORT register for DATA WRITE
       volatile uint32_t *readPort;  ///< PORT (PIN) register for DATA READ
+#elif defined(ARDUINO_ARCH_RP2040)
+      uint32_t dataPinMask;         ///< Bitmask for data pins
 #else
       volatile uint8_t *writePort;  ///< PORT register for DATA WRITE
       volatile uint8_t *readPort;   ///< PORT (PIN) register for DATA READ

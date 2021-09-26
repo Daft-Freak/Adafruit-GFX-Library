@@ -157,7 +157,27 @@ Adafruit_SPITFT::Adafruit_SPITFT(uint16_t w, uint16_t h, int8_t cs, int8_t dc,
   } else {
     swspi.misoPort = portInputRegister(dc);
   }
-#else  // !CORE_TEENSY
+#elif defined(ARDUINO_ARCH_RP2040)
+  dcPinMask = 1 << dc;
+  swspi.sckPinMask = 1 << sck;
+  swspi.mosiPinMask = 1 << mosi;
+
+  dcPortSet = csPortSet = swspi.sckPortSet = swspi.mosiPortSet =
+      &sio_hw->gpio_set;
+  dcPortClr = csPortClr = swspi.sckPortClr = swspi.mosiPortClr =
+      &sio_hw->gpio_clr;
+  swspi.misoPort = (PORTreg_t)&sio_hw->gpio_in;
+
+  if (cs >= 0)
+    csPinMask = 1 << cs;
+  else
+    csPinMask = 0;
+
+  if (miso >= 0)
+    swspi.misoPinMask = 1 << miso;
+  else
+    swspi.misoPinMask = 0;
+#else  // !CORE_TEENSY && !ARDUINO_ARCH_RP2040
   dcPinMask = digitalPinToBitMask(dc);
   swspi.sckPinMask = digitalPinToBitMask(sck);
   swspi.mosiPinMask = digitalPinToBitMask(mosi);
@@ -304,7 +324,15 @@ Adafruit_SPITFT::Adafruit_SPITFT(uint16_t w, uint16_t h, SPIClass *spiClass,
     csPortSet = dcPortSet;
     csPortClr = dcPortClr;
   }
-#else  // !CORE_TEENSY
+#elif defined(ARDUINO_ARCH_RP2040)
+  dcPinMask = 1 << dc;
+  dcPortSet = csPortSet = &sio_hw->gpio_set;
+  dcPortClr = csPortClr = &sio_hw->gpio_clr;
+  if (cs >= 0)
+    csPinMask = 1 << cs;
+  else
+    csPinMask = 0;
+#else  // !CORE_TEENSY && !ARDUINO_ARCH_RP2040
   dcPinMask = digitalPinToBitMask(dc);
   dcPortSet = &(PORT->Group[g_APinDescription[dc].ulPort].OUTSET.reg);
   dcPortClr = &(PORT->Group[g_APinDescription[dc].ulPort].OUTCLR.reg);
@@ -425,7 +453,26 @@ Adafruit_SPITFT::Adafruit_SPITFT(uint16_t w, uint16_t h, tftBusWidth busWidth,
   tft8.readPort = portInputRegister(d0);
   tft8.dirSet = portModeRegister(d0);
   tft8.dirClr = portModeRegister(d0);
-#else  // !CORE_TEENSY
+#elif defined(ARDUINO_ARCH_RP2040)
+  dcPinMask = 1 << dc;
+  tft8.wrPinMask = 1 << wr;
+
+  dcPortSet = csPortSet = tft8.rdPortSet = tft8.wrPortSet = &sio_hw->gpio_set;
+  dcPortClr = csPortClr = tft8.rdPortClr = tft8.wrPortClr = &sio_hw->gpio_clr;
+
+  // Can't do byte/halfword writes to SIO registers, so no ports set here
+  tft8.dataPinMask = (tft8.wide ? 0xFFFF : 0xFF) << d0;
+
+  if (cs >= 0)
+    csPinMask = 1 << cs;
+  else
+    csPinMask = 0;
+
+  if (rd >= 0)
+    tft8.rdPinMask = 1 << rd;
+  else
+    tft8.rdPinMask = 0;
+#else  // !CORE_TEENSY && !ARDUINO_ARCH_RP2040
   tft8.wrPinMask = digitalPinToBitMask(wr);
   tft8.wrPortSet = &(PORT->Group[g_APinDescription[wr].ulPort].OUTSET.reg);
   tft8.wrPortClr = &(PORT->Group[g_APinDescription[wr].ulPort].OUTCLR.reg);
@@ -616,7 +663,13 @@ void Adafruit_SPITFT::initSPI(uint32_t freq, uint8_t spiMode) {
       *(volatile uint16_t *)tft8.dirSet = 0xFFFF;
       *(volatile uint16_t *)tft8.writePort = 0x0000;
     }
-#else  // !CORE_TEENSY
+#elif defined(ARDUINO_ARCH_RP2040)
+    int w = tft8.wide ? 16 : 8;
+    for (int i = 0; i < w; i++)
+      _gpio_init(tft8._d0 + i);
+
+    sio_hw->gpio_oe_set = tft8.dataPinMask;
+#else  // !CORE_TEENSY && !ARDUINO_ARCH_RP2040
     uint8_t portNum = g_APinDescription[tft8._d0].ulPort, // d0 PORT #
         dBit = g_APinDescription[tft8._d0].ulPin,         // d0 bit in PORT
         lastBit = dBit + (tft8.wide ? 15 : 7);
@@ -1425,6 +1478,16 @@ void Adafruit_SPITFT::writeColor(uint16_t color, uint32_t len) {
       while (len--) {
         TFT_WR_STROBE();
       }
+#elif defined(ARDUINO_ARCH_RP2040)
+      if (!tft8.wide) {
+        len *= 2;
+        gpio_put_masked(tft8.dataPinMask, hi << tft8._d0);
+      } else {
+        gpio_put_masked(tft8.dataPinMask, color << tft8._d0);
+      }
+      while (len--) {
+        TFT_WR_STROBE();
+      }
 #elif defined(USE_FAST_PINIO)
       if (!tft8.wide) {
         len *= 2;
@@ -1442,6 +1505,10 @@ void Adafruit_SPITFT::writeColor(uint16_t color, uint32_t len) {
         *tft8.writePort = hi;
         TFT_WR_STROBE();
         *tft8.writePort = lo;
+#elif defined(ARDUINO_ARCH_RP2040)
+        gpio_put_masked(tft8.dataPinMask, hi << tft8._d0);
+        TFT_WR_STROBE();
+        gpio_put_masked(tft8.dataPinMask, lo << tft8._d0);
 #elif defined(USE_FAST_PINIO)
         *tft8.writePort = hi;
         TFT_WR_STROBE();
@@ -2014,7 +2081,12 @@ uint16_t Adafruit_SPITFT::readcommand16(uint16_t addr) {
     SPI_WRITE16(addr);
     SPI_DC_HIGH(); // Data mode
     TFT_RD_LOW();  // Read line LOW
-#if defined(HAS_PORT_SET_CLR)
+
+#if defined(ARDUINO_ARCH_RP2040)
+    gpio_set_dir_in_masked(tft8.dataPinMask);
+    result = (sio_hw->gpio_in >> tft8._d0) & 0xFFFF;
+    gpio_set_dir_out_masked(tft8.dataPinMask);
+#elif defined(HAS_PORT_SET_CLR)
     *(volatile uint16_t *)tft8.dirClr = 0xFFFF;   // Input state
     result = *(volatile uint16_t *)tft8.readPort; // 16-bit read
     *(volatile uint16_t *)tft8.dirSet = 0xFFFF;   // Output state
@@ -2117,6 +2189,8 @@ void Adafruit_SPITFT::spiWrite(uint8_t b) {
   } else { // TFT_PARALLEL
 #if defined(__AVR__)
     *tft8.writePort = b;
+#elif defined(ARDUINO_ARCH_RP2040)
+    gpio_put_masked(tft8.dataPinMask, b << tft8._d0);
 #elif defined(USE_FAST_PINIO)
     if (!tft8.wide)
       *tft8.writePort = b;
@@ -2175,6 +2249,10 @@ uint8_t Adafruit_SPITFT::spiRead(void) {
       *tft8.portDir = 0x00; // Set port to input state
       w = *tft8.readPort;   // Read value from port
       *tft8.portDir = 0xFF; // Restore port to output
+#elif defined(ARDUINO_ARCH_RP2040)
+      gpio_set_dir_in_masked(tft8.dataPinMask);
+      w = (sio_hw->gpio_in & tft8.dataPinMask) >> tft8._d0;
+      gpio_set_dir_out_masked(tft8.dataPinMask);
 #else                       // !__AVR__
       if (!tft8.wide) {                             // 8-bit TFT connection
 #if defined(HAS_PORT_SET_CLR)
@@ -2216,7 +2294,10 @@ uint8_t Adafruit_SPITFT::spiRead(void) {
 */
 void Adafruit_SPITFT::write16(uint16_t w) {
   if (connection == TFT_PARALLEL) {
-#if defined(USE_FAST_PINIO)
+#if defined(ARDUINO_ARCH_RP2040)
+    if (tft8.wide)
+      gpio_put_masked(tft8.dataPinMask, w << tft8._d0);
+#elif defined(USE_FAST_PINIO)
     if (tft8.wide)
       *(volatile uint16_t *)tft8.writePort = w;
 #else
@@ -2255,7 +2336,11 @@ uint16_t Adafruit_SPITFT::read16(void) {
 #if defined(USE_FAST_PINIO)
       TFT_RD_LOW();    // Read line LOW
       if (tft8.wide) { // 16-bit TFT connection
-#if defined(HAS_PORT_SET_CLR)
+#if defined(ARDUINO_ARCH_RP2040)
+        gpio_set_dir_in_masked(tft8.dataPinMask);
+        w = (sio_hw->gpio_in >> tft8._d0) & 0xFFFF;
+        gpio_set_dir_out_masked(tft8.dataPinMask);
+#elif defined(HAS_PORT_SET_CLR)
         *(volatile uint16_t *)tft8.dirClr = 0xFFFF; // Input state
         w = *(volatile uint16_t *)tft8.readPort;    // 16-bit read
         *(volatile uint16_t *)tft8.dirSet = 0xFFFF; // Output state
@@ -2431,6 +2516,14 @@ void Adafruit_SPITFT::SPI_WRITE16(uint16_t w) {
     *tft8.writePort = w >> 8;
     TFT_WR_STROBE();
     *tft8.writePort = w;
+#elif defined(ARDUINO_ARCH_RP2040)
+    if (!tft8.wide) {
+      gpio_put_masked(tft8.dataPinMask, (w >> 8) << tft8._d0);
+      TFT_WR_STROBE();
+      gpio_put_masked(tft8.dataPinMask, w << tft8._d0);
+    } else {
+      gpio_put_masked(tft8.dataPinMask, w << tft8._d0);
+    }
 #elif defined(USE_FAST_PINIO)
     if (!tft8.wide) {
       *tft8.writePort = w >> 8;
@@ -2492,6 +2585,20 @@ void Adafruit_SPITFT::SPI_WRITE32(uint32_t l) {
     *tft8.writePort = l >> 8;
     TFT_WR_STROBE();
     *tft8.writePort = l;
+#elif defined(ARDUINO_ARCH_RP2040)
+    if (!tft8.wide) {
+      gpio_put_masked(tft8.dataPinMask, (l >> 24) << tft8._d0);
+      TFT_WR_STROBE();
+      gpio_put_masked(tft8.dataPinMask, (l >> 16) << tft8._d0);
+      TFT_WR_STROBE();
+      gpio_put_masked(tft8.dataPinMask, (l >> 8) << tft8._d0);
+      TFT_WR_STROBE();
+      gpio_put_masked(tft8.dataPinMask, l << tft8._d0);
+    } else {
+      gpio_put_masked(tft8.dataPinMask, (l >> 16) << tft8._d0);
+      TFT_WR_STROBE();
+      gpio_put_masked(tft8.dataPinMask, l << tft8._d0);
+    }
 #elif defined(USE_FAST_PINIO)
     if (!tft8.wide) {
       *tft8.writePort = l >> 24;
