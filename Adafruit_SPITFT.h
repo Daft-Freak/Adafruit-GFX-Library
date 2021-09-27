@@ -452,8 +452,8 @@ protected:
 #elif defined(ARDUINO_ARCH_RP2040)
       uint32_t dataPinMask;         ///< Bitmask for data pins
 #else
-      volatile uint8_t *writePort;  ///< PORT register for DATA WRITE
-      volatile uint8_t *readPort;   ///< PORT (PIN) register for DATA READ
+      volatile uint8_t *writePort; ///< PORT register for DATA WRITE
+      volatile uint8_t *readPort;  ///< PORT (PIN) register for DATA READ
 #endif
 #if defined(HAS_PORT_SET_CLR)
       // Port direction register pointers are always 8-bit regardless of

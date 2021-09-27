@@ -2091,9 +2091,9 @@ uint16_t Adafruit_SPITFT::readcommand16(uint16_t addr) {
     result = *(volatile uint16_t *)tft8.readPort; // 16-bit read
     *(volatile uint16_t *)tft8.dirSet = 0xFFFF;   // Output state
 #else              // !HAS_PORT_SET_CLR
-    *(volatile uint16_t *)tft8.portDir = 0x0000;     // Input state
-    result = *(volatile uint16_t *)tft8.readPort;    // 16-bit read
-    *(volatile uint16_t *)tft8.portDir = 0xFFFF;     // Output state
+    *(volatile uint16_t *)tft8.portDir = 0x0000;    // Input state
+    result = *(volatile uint16_t *)tft8.readPort;   // 16-bit read
+    *(volatile uint16_t *)tft8.portDir = 0xFFFF;    // Output state
 #endif             // end !HAS_PORT_SET_CLR
     TFT_RD_HIGH(); // Read line HIGH
     endWrite();
@@ -2253,8 +2253,8 @@ uint8_t Adafruit_SPITFT::spiRead(void) {
       gpio_set_dir_in_masked(tft8.dataPinMask);
       w = (sio_hw->gpio_in & tft8.dataPinMask) >> tft8._d0;
       gpio_set_dir_out_masked(tft8.dataPinMask);
-#else                       // !__AVR__
-      if (!tft8.wide) {                           // 8-bit TFT connection
+#else // !__AVR__
+      if (!tft8.wide) {                             // 8-bit TFT connection
 #if defined(HAS_PORT_SET_CLR)
         *tft8.dirClr = 0xFF;                        // Set port to input state
         w = *tft8.readPort;                         // Read value from port
@@ -2264,22 +2264,22 @@ uint8_t Adafruit_SPITFT::spiRead(void) {
         w = *tft8.readPort;                          // Read value from port
         *tft8.portDir = 0xFF;                        // Restore port to output
 #endif // end HAS_PORT_SET_CLR
-      } else { // 16-bit TFT connection
+      } else {                                      // 16-bit TFT connection
 #if defined(HAS_PORT_SET_CLR)
         *(volatile uint16_t *)tft8.dirClr = 0xFFFF; // Input state
         w = *(volatile uint16_t *)tft8.readPort;    // 16-bit read
         *(volatile uint16_t *)tft8.dirSet = 0xFFFF; // Output state
-#else  // !HAS_PORT_SET_CLR
+#else                // !HAS_PORT_SET_CLR
         *(volatile uint16_t *)tft8.portDir = 0x0000; // Input state
         w = *(volatile uint16_t *)tft8.readPort;     // 16-bit read
         *(volatile uint16_t *)tft8.portDir = 0xFFFF; // Output state
-#endif // end !HAS_PORT_SET_CLR
+#endif               // end !HAS_PORT_SET_CLR
       }
-#endif // end !__AVR__
-      TFT_RD_HIGH();                                // Read line HIGH
-#else  // !USE_FAST_PINIO
+#endif               // end !__AVR__
+      TFT_RD_HIGH(); // Read line HIGH
+#else                // !USE_FAST_PINIO
       w = 0; // Parallel TFT is NOT SUPPORTED without USE_FAST_PINIO
-#endif // end !USE_FAST_PINIO
+#endif               // end !USE_FAST_PINIO
     }
     return w;
   }
